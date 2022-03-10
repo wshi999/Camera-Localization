@@ -4,10 +4,13 @@ import torch.utils.data as Data
 from torch.autograd import Variable
 from models.PoseNet import PoseNet
 from data.DataSource import *
+from optparse import OptionParser
 
-directory = 'data/datasets/KingsCollege/'
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+directory = "data/datasets/KingsCollege/"
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 
 def get_accuracy(pred_xyz, pred_wpqr, poses_gt):
     pose_xyz = poses_gt[0:3]
@@ -22,34 +25,39 @@ def get_accuracy(pred_xyz, pred_wpqr, poses_gt):
 
     return error_x, theta
 
-def main(epoch, data_dir):
+
+def main(epoch, data_dir, batch_size):
     # test dataset and test loader
     datasource = DataSource(directory, train=False)
-    test_loader = Data.DataLoader(dataset=datasource, batch_size=batch_size, shuffle=True)
+    test_loader = Data.DataLoader(
+        dataset=datasource, batch_size=batch_size, shuffle=True
+    )
     results = np.zeros((len(test_loader.dataset), 2))
 
     # load model
-    posenet = PoseNet(load_weights=False).to(device)
+    posenet = PoseNet().to(device)
+    # posenet = PoseNet(load_weights=False).to(device)
 
-    save_filename = 'epoch_{}.pth'.format(str(epoch).zfill(5))
-    save_path = os.path.join('checkpoints', save_filename)
+    save_filename = "epoch_{}.pth".format(str(epoch).zfill(5))
+    save_path = os.path.join("checkpoints", save_filename)
     posenet.load_state_dict(torch.load(save_path))
     print("Checkpoint {} loaded!".format(save_filename))
-
 
     with torch.no_grad():
         posenet.eval()
         for step, (images, poses) in enumerate(test_loader):
-            b_images = Variable(images).to(device)
+            b_images = Variable(images)
+            b_images = b_images.type(torch.float32).to(device)
             poses[0] = np.array(poses[0])
             poses[1] = np.array(poses[1])
             poses[2] = np.array(poses[2])
             poses[3] = np.array(poses[3])
             poses[4] = np.array(poses[4])
-            poses[5] = np.array(poses[4])
-            poses[6] = np.array(poses[5])
+            poses[5] = np.array(poses[5])
+            poses[6] = np.array(poses[6])
             poses = np.transpose(poses)
-            b_poses = Variable(torch.Tensor(poses)).to(device)
+            b_poses = Variable(torch.Tensor(poses))
+            b_poses = b_poses.type(torch.float32).to(device)
 
             p_xyz, p_wpqr = posenet(b_images)
 
@@ -57,27 +65,32 @@ def main(epoch, data_dir):
             p_wpqr_np = p_wpqr.cpu().numpy()
 
             for i in range(b_poses.shape[0]):
-                print("{}".format(step*batch_size+i))
-                print("GT\t| xyz: {}\twpqr: {}".format(poses[i,:3], poses[i, 3:]))
+                print("{}".format(step * batch_size + i))
+                print("GT\t| xyz: {}\twpqr: {}".format(poses[i, :3], poses[i, 3:]))
                 print("PRED\t| xyz: {}\twpqr: {}".format(p_xyz_np[i], p_wpqr_np[i]))
 
                 pos_error, ori_error = get_accuracy(p_xyz_np[i], p_wpqr_np[i], poses[i])
-                results[step*batch_size+i, :] = [pos_error, ori_error]
+                results[step * batch_size + i, :] = [pos_error, ori_error]
                 print("ACC\t| pos: {} m \tori: {} degrees".format(pos_error, ori_error))
 
         median_result = np.median(results, axis=0)
         print("-----------------------------")
-        print("Median position error: {} m \t Median orientation error: {} degrees".format(median_result[0], median_result[1]))
+        print(
+            "Median position error: {} m \t Median orientation error: {} degrees".format(
+                median_result[0], median_result[1]
+            )
+        )
 
 
 def get_args():
     parser = OptionParser()
-    parser.add_option('--epoch', default=1, type='int')
-    parser.add_option('--data_dir', default='data/datasets/KingsCollege/')
+    parser.add_option("--epoch", default=51, type="int")
+    parser.add_option("--data_dir", default="data/datasets/KingsCollege/")
 
     (options, args) = parser.parse_args()
     return options
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     args = get_args()
-    main(epoch=args.epoch, data_dir=args.data_dir)
+    main(epoch=args.epoch, data_dir=args.data_dir, batch_size=75)
